@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conference Timer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #timer {
+            font-weight: bold;
+            text-align: center;
+            line-height: 0.9;
+            white-space: nowrap;
+        }
+
+        #label {
+            font-weight: normal;
+            text-align: center;
+            margin-bottom: 2vh;
+            opacity: 0.8;
+            white-space: nowrap;
+        }
+
+        #message {
+            font-weight: normal;
+            text-align: center;
+            margin-top: 3vh;
+            opacity: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            transform: translateY(-20px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            max-height: 0;
+            overflow: hidden;
+        }
+
+        #message.visible {
+            opacity: 0.9;
+            transform: translateY(0);
+            max-height: 500px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 95vw;
+            padding: 0 2vw;
+        }
+
+        #timer, #label {
+            overflow: hidden;
+            text-overflow: clip;
+        }
+
+        .warning {
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        .flashing {
+            animation: flash 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            25% { opacity: 0.3; transform: scale(1.05); }
+            50% { opacity: 1; transform: scale(1); }
+            75% { opacity: 0.3; transform: scale(1.05); }
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .controls button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .controls button:hover {
+            background: #45a049;
+        }
+
+        .controls button.stop {
+            background: #f44336;
+        }
+
+        .controls button.stop:hover {
+            background: #da190b;
+        }
+
+        .controls button.reset {
+            background: #2196F3;
+        }
+
+        .controls button.reset:hover {
+            background: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="label"></div>
+        <div id="timer">00:00</div>
+        <div id="message"></div>
+    </div>
+
+    <div class="controls" id="controls">
+        <button id="startBtn" onclick="startTimer()">Start</button>
+        <button id="pauseBtn" onclick="pauseTimer()" style="display: none;">Pause</button>
+        <button class="stop" onclick="stopTimer()">Stop</button>
+        <button class="reset" onclick="resetTimer()">Reset</button>
+    </div>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // Helper function to parse time (supports both seconds and mm:ss format)
+        function parseTime(value, defaultSeconds) {
+            if (!value) return defaultSeconds;
+
+            // Check if value contains a colon (mm:ss or hh:mm:ss format)
+            if (value.includes(':')) {
+                const parts = value.split(':').map(p => parseInt(p) || 0);
+                if (parts.length === 2) {
+                    // mm:ss format
+                    return parts[0] * 60 + parts[1];
+                } else if (parts.length === 3) {
+                    // hh:mm:ss format
+                    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+                }
+            }
+
+            // Otherwise treat as seconds
+            return parseInt(value) || defaultSeconds;
+        }
+
+        // Configuration from URL
+        const config = {
+            duration: parseTime(urlParams.get('duration'), 600), // accepts seconds or mm:ss (default 10 min)
+            mode: urlParams.get('mode') || 'countdown', // countdown or clock
+            fontSize: urlParams.get('fontSize') || '25vw',
+            labelSize: urlParams.get('labelSize') || '6vw',
+            messageSize: urlParams.get('messageSize') || '5vw',
+            color: urlParams.get('color') || '#ffffff',
+            warningColor: urlParams.get('warningColor') || '#ff9800',
+            dangerColor: urlParams.get('dangerColor') || '#f44336',
+            backgroundColor: urlParams.get('bg') || 'transparent',
+            warningTime: parseTime(urlParams.get('warningTime'), 60), // accepts seconds or mm:ss
+            dangerTime: parseTime(urlParams.get('dangerTime'), 30), // accepts seconds or mm:ss
+            label: urlParams.get('label') || '',
+            hideControls: urlParams.get('hideControls') === 'true',
+            autoStart: urlParams.get('autoStart') === 'true',
+            countUp: urlParams.get('countUp') === 'true'
+        };
+
+        // Apply styles
+        document.body.style.backgroundColor = config.backgroundColor;
+        document.getElementById('timer').style.fontSize = config.fontSize;
+        document.getElementById('timer').style.color = config.color;
+        document.getElementById('label').style.fontSize = config.labelSize;
+        document.getElementById('label').style.color = config.color;
+        document.getElementById('label').textContent = config.label;
+        document.getElementById('message').style.fontSize = config.messageSize;
+        document.getElementById('message').style.color = config.color;
+
+        if (config.hideControls) {
+            document.getElementById('controls').style.display = 'none';
+        }
+
+        // Function to ensure text fits within viewport
+        function adjustFontSize() {
+            const timerElement = document.getElementById('timer');
+            const container = document.querySelector('.container');
+
+            // Get current computed font size
+            let currentSize = parseFloat(window.getComputedStyle(timerElement).fontSize);
+
+            // Check if text is overflowing
+            while (timerElement.scrollWidth > window.innerWidth * 0.95 && currentSize > 10) {
+                currentSize -= 1;
+                timerElement.style.fontSize = currentSize + 'px';
+            }
+        }
+
+        // Timer state
+        let timeRemaining = config.duration;
+        let timeElapsed = 0;
+        let interval = null;
+        let isRunning = false;
+
+        function formatTime(seconds) {
+            const isNegative = seconds < 0;
+            const absSeconds = Math.abs(seconds);
+
+            const hrs = Math.floor(absSeconds / 3600);
+            const mins = Math.floor((absSeconds % 3600) / 60);
+            const secs = absSeconds % 60;
+
+            let timeString;
+            if (hrs > 0) {
+                timeString = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                timeString = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            return isNegative ? `-${timeString}` : timeString;
+        }
+
+        function formatClock() {
+            const now = new Date();
+            const hrs = now.getHours().toString().padStart(2, '0');
+            const mins = now.getMinutes().toString().padStart(2, '0');
+            const secs = now.getSeconds().toString().padStart(2, '0');
+            return `${hrs}:${mins}:${secs}`;
+        }
+
+        function updateDisplay() {
+            const timerElement = document.getElementById('timer');
+
+            if (config.mode === 'clock') {
+                timerElement.textContent = formatClock();
+            } else if (config.countUp) {
+                timerElement.textContent = formatTime(timeElapsed);
+                // No color changes for count up
+                timerElement.style.color = config.color;
+                timerElement.classList.remove('warning');
+            } else {
+                timerElement.textContent = formatTime(timeRemaining);
+
+                // Update color based on time remaining
+                if (timeRemaining <= 0) {
+                    timerElement.style.color = config.dangerColor;
+                    timerElement.classList.add('warning');
+                } else if (timeRemaining <= config.dangerTime) {
+                    timerElement.style.color = config.dangerColor;
+                    timerElement.classList.add('warning');
+                } else if (timeRemaining <= config.warningTime) {
+                    timerElement.style.color = config.warningColor;
+                    timerElement.classList.remove('warning');
+                } else {
+                    timerElement.style.color = config.color;
+                    timerElement.classList.remove('warning');
+                }
+            }
+
+            // Ensure text fits within viewport
+            adjustFontSize();
+        }
+
+        function tick() {
+            if (config.mode === 'clock') {
+                updateDisplay();
+            } else if (config.countUp) {
+                timeElapsed++;
+                updateDisplay();
+            } else {
+                timeRemaining--;
+                updateDisplay();
+
+                if (timeRemaining < 0) {
+                    // Continue showing negative time
+                }
+            }
+
+            // Broadcast state immediately after each tick
+            if (window.broadcastState) {
+                window.broadcastState();
+            }
+        }
+
+        function startTimer() {
+            if (!isRunning) {
+                isRunning = true;
+                interval = setInterval(tick, 1000);
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('pauseBtn').style.display = 'inline-block';
+
+                // Broadcast state change
+                if (window.broadcastState) {
+                    window.broadcastState();
+                }
+            }
+        }
+
+        function pauseTimer() {
+            if (isRunning) {
+                isRunning = false;
+                clearInterval(interval);
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('pauseBtn').style.display = 'none';
+
+                // Broadcast state change
+                if (window.broadcastState) {
+                    window.broadcastState();
+                }
+            }
+        }
+
+        function stopTimer() {
+            isRunning = false;
+            clearInterval(interval);
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('pauseBtn').style.display = 'none';
+
+            // Broadcast state change
+            if (window.broadcastState) {
+                window.broadcastState();
+            }
+        }
+
+        function resetTimer() {
+            stopTimer();
+            timeRemaining = config.duration;
+            timeElapsed = 0;
+            updateDisplay();
+
+            // Broadcast state change
+            if (window.broadcastState) {
+                window.broadcastState();
+            }
+        }
+
+        // BroadcastChannel for remote control
+        let channel = null;
+        try {
+            channel = new BroadcastChannel('timer-control');
+
+            // Listen for commands from control panel
+            channel.onmessage = (event) => {
+                const { command, value } = event.data;
+
+                switch (command) {
+                    case 'start':
+                        startTimer();
+                        break;
+                    case 'pause':
+                        pauseTimer();
+                        break;
+                    case 'stop':
+                        stopTimer();
+                        break;
+                    case 'reset':
+                        resetTimer();
+                        break;
+                    case 'adjustTime':
+                        // Adjust time by value (in seconds)
+                        if (config.mode === 'countdown') {
+                            timeRemaining += value;
+                            updateDisplay();
+                        } else if (config.countUp) {
+                            timeElapsed = Math.max(0, timeElapsed + value);
+                            updateDisplay();
+                        }
+                        break;
+                    case 'setDuration':
+                        // Set new duration and reset
+                        if (config.mode === 'countdown') {
+                            config.duration = value;
+                            resetTimer();
+                        }
+                        break;
+                    case 'setMessage':
+                        // Set custom message below timer
+                        const messageEl = document.getElementById('message');
+                        messageEl.textContent = value || '';
+
+                        // Toggle visible class for smooth transition
+                        if (value && value.trim() !== '') {
+                            messageEl.classList.add('visible');
+                        } else {
+                            messageEl.classList.remove('visible');
+                        }
+                        break;
+                    case 'flashTimer':
+                        // Flash the timer to get attention
+                        const timerEl = document.getElementById('timer');
+                        timerEl.classList.add('flashing');
+
+                        // Repeat the flash animation multiple times
+                        let flashCount = 0;
+                        const flashInterval = setInterval(() => {
+                            flashCount++;
+                            timerEl.classList.remove('flashing');
+
+                            // Force reflow to restart animation
+                            void timerEl.offsetWidth;
+
+                            timerEl.classList.add('flashing');
+
+                            if (flashCount >= 5) {
+                                clearInterval(flashInterval);
+                                timerEl.classList.remove('flashing');
+                            }
+                        }, 500);
+                        break;
+                }
+
+                // Broadcast updated state immediately
+                if (window.broadcastState) {
+                    window.broadcastState();
+                }
+            };
+
+            // Broadcast current state to control panel
+            window.broadcastState = function() {
+                if (channel) {
+                    channel.postMessage({
+                        type: 'state',
+                        isRunning: isRunning,
+                        timeRemaining: timeRemaining,
+                        timeElapsed: timeElapsed,
+                        mode: config.mode,
+                        countUp: config.countUp,
+                        duration: config.duration
+                    });
+                }
+            }
+
+            // Broadcast initial state
+            window.broadcastState();
+
+            // Keep-alive heartbeat every 2 seconds (lighter than every second)
+            // This keeps the control panel showing "Connected" even when paused
+            setInterval(() => {
+                if (window.broadcastState) {
+                    window.broadcastState();
+                }
+            }, 2000);
+        } catch (e) {
+            // BroadcastChannel not supported or failed
+            console.log('BroadcastChannel not available');
+        }
+
+        // Initialize display
+        updateDisplay();
+
+        // Auto-start if configured
+        if (config.autoStart && config.mode !== 'clock') {
+            startTimer();
+        } else if (config.mode === 'clock') {
+            startTimer(); // Always start clock mode
+        }
+
+        // For clock mode, start immediately
+        if (config.mode === 'clock') {
+            document.getElementById('controls').style.display = 'none';
+        }
+
+        // Adjust font size on window resize
+        window.addEventListener('resize', () => {
+            // Reset to configured size before adjusting
+            document.getElementById('timer').style.fontSize = config.fontSize;
+            adjustFontSize();
+        });
+    </script>
+</body>
+</html>

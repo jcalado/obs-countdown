@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Control Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 10px;
+        }
+
+        .panel {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            text-align: center;
+            color: #4CAF50;
+        }
+
+        .status-display {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            text-align: center;
+            position: relative;
+        }
+
+        .connection-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #f44336;
+            transition: background 0.3s ease;
+            animation: pulse-disconnected 2s ease-in-out infinite;
+        }
+
+        .connection-badge.connected {
+            background: #4CAF50;
+            animation: none;
+        }
+
+        @keyframes pulse-disconnected {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .timer-display.running {
+            color: #4CAF50;
+        }
+
+        .timer-display.paused {
+            color: #ff9800;
+        }
+
+        .timer-display.stopped {
+            color: #f44336;
+        }
+
+        .status-text {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .section {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-bottom: 0px;
+        }
+
+        .button-group.two-col {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .button-group.full {
+            grid-template-columns: 1fr;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: white;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.start {
+            background: #4CAF50;
+        }
+
+        button.start:hover {
+            background: #45a049;
+        }
+
+        button.pause {
+            background: #ff9800;
+        }
+
+        button.pause:hover {
+            background: #e68900;
+        }
+
+        button.stop {
+            background: #f44336;
+        }
+
+        button.stop:hover {
+            background: #da190b;
+        }
+
+        button.reset {
+            background: #2196F3;
+        }
+
+        button.reset:hover {
+            background: #0b7dda;
+        }
+
+        button.adjust {
+            background: #607D8B;
+        }
+
+        button.adjust:hover {
+            background: #546E7A;
+        }
+
+        button.preset {
+            background: #9C27B0;
+        }
+
+        button.preset:hover {
+            background: #7B1FA2;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #1e1e1e;
+            color: white;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .sections-container {
+            display: block;
+        }
+
+        .sections-grid {
+            display: block;
+        }
+
+        /* Landscape/Wide Layout Optimization */
+        @media (min-aspect-ratio: 16/9) {
+            body {
+                padding: 8px;
+            }
+
+            h1 {
+                font-size: 16px;
+                margin-bottom: 6px;
+            }
+
+            .panel {
+                max-width: none;
+                width: 100%;
+            }
+
+            .status-display {
+                display: inline-block;
+                width: 200px;
+                vertical-align: top;
+                margin-right: 8px;
+                margin-bottom: 0;
+            }
+
+            .timer-display {
+                font-size: 28px;
+            }
+
+            .sections-container {
+                display: inline-block;
+                vertical-align: top;
+                width: calc(100% - 216px);
+            }
+
+            .sections-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 8px;
+            }
+
+            .section {
+                margin-bottom: 0;
+            }
+
+            .section-title {
+                font-size: 10px;
+                margin-bottom: 4px;
+            }
+
+            button {
+                padding: 6px 8px;
+                font-size: 11px;
+            }
+
+            .button-group {
+                gap: 4px;
+            }
+
+            input[type="text"] {
+                padding: 6px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <div class="status-display">
+            <div class="connection-badge" id="connectionBadge"></div>
+            <div class="timer-display stopped" id="timerDisplay">00:00</div>
+            <div class="status-text" id="statusText">STOPPED</div>
+        </div>
+
+        <div class="sections-container">
+            <div class="sections-grid">
+                <div class="section">
+                    <div class="section-title">Main Controls</div>
+                    <div class="button-group">
+                        <button class="start" onclick="sendCommand('start')">Start</button>
+                        <button class="pause" onclick="sendCommand('pause')">Pause</button>
+                        <button class="stop" onclick="sendCommand('stop')">Stop</button>
+                        <button class="reset" onclick="sendCommand('reset')">Reset</button>
+                    </div>
+                    <div class="button-group full" style="margin-top: 6px;">
+                        <button class="preset" onclick="flashTimer()">⚡ Flash Timer</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Adjust Time</div>
+                    <div class="button-group">
+                        <button class="adjust" onclick="adjustTime(-300)">-5m</button>
+                        <button class="adjust" onclick="adjustTime(-60)">-1m</button>
+                        <button class="adjust" onclick="adjustTime(60)">+1m</button>
+                        <button class="adjust" onclick="adjustTime(300)">+5m</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Quick Presets</div>
+                    <div class="button-group">
+                        <button class="preset" onclick="setDuration(300)">5 min</button>
+                        <button class="preset" onclick="setDuration(600)">10 min</button>
+                        <button class="preset" onclick="setDuration(900)">15 min</button>
+                        <button class="preset" onclick="setDuration(1200)">20 min</button>
+                    </div>
+                    <div class="button-group two-col" style="margin-top: 6px;">
+                        <button class="preset" onclick="setDuration(1800)">30 min</button>
+                        <button class="preset" onclick="setDuration(3600)">60 min</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Custom Duration</div>
+                    <div class="input-group">
+                        <input type="text" id="customDuration" placeholder="mm:ss or seconds" value="10:00">
+                        <button class="reset" onclick="setCustomDuration()">Set</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Custom Message</div>
+                    <div class="input-group">
+                        <input type="text" id="customMessage" placeholder="Message to display below timer">
+                        <button class="reset" onclick="setCustomMessage()">Send</button>
+                    </div>
+                    <div class="button-group" style="margin-top: 6px;">
+                        <button class="stop" onclick="clearMessage()">Clear</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let channel = null;
+        let lastStateTime = 0;
+
+        // Parse time (supports seconds and mm:ss format)
+        function parseTime(value) {
+            if (!value) return 0;
+
+            if (value.includes(':')) {
+                const parts = value.split(':').map(p => parseInt(p) || 0);
+                if (parts.length === 2) {
+                    return parts[0] * 60 + parts[1];
+                } else if (parts.length === 3) {
+                    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+                }
+            }
+
+            return parseInt(value) || 0;
+        }
+
+        // Format time for display
+        function formatTime(seconds) {
+            const isNegative = seconds < 0;
+            const absSeconds = Math.abs(seconds);
+
+            const hrs = Math.floor(absSeconds / 3600);
+            const mins = Math.floor((absSeconds % 3600) / 60);
+            const secs = absSeconds % 60;
+
+            let timeString;
+            if (hrs > 0) {
+                timeString = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                timeString = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            return isNegative ? `-${timeString}` : timeString;
+        }
+
+        // Initialize BroadcastChannel
+        try {
+            channel = new BroadcastChannel('timer-control');
+
+            // Listen for state updates from timer
+            channel.onmessage = (event) => {
+                if (event.data.type === 'state') {
+                    updateDisplay(event.data);
+                    lastStateTime = Date.now();
+                    updateConnectionStatus(true);
+                }
+            };
+
+            // Check connection status periodically
+            setInterval(() => {
+                const timeSinceLastState = Date.now() - lastStateTime;
+                if (timeSinceLastState > 3000) {
+                    updateConnectionStatus(false);
+                }
+            }, 1000);
+
+        } catch (e) {
+            console.error('BroadcastChannel not available', e);
+        }
+
+        function updateConnectionStatus(connected) {
+            const badgeEl = document.getElementById('connectionBadge');
+            if (connected) {
+                badgeEl.classList.add('connected');
+            } else {
+                badgeEl.classList.remove('connected');
+            }
+        }
+
+        function updateDisplay(state) {
+            const displayEl = document.getElementById('timerDisplay');
+            const statusEl = document.getElementById('statusText');
+
+            // Update time display
+            if (state.mode === 'countdown') {
+                displayEl.textContent = formatTime(state.timeRemaining);
+            } else if (state.countUp) {
+                displayEl.textContent = formatTime(state.timeElapsed);
+            } else if (state.mode === 'clock') {
+                displayEl.textContent = 'CLOCK MODE';
+            }
+
+            // Update status
+            if (state.isRunning) {
+                displayEl.className = 'timer-display running';
+                statusEl.textContent = 'RUNNING';
+            } else {
+                displayEl.className = 'timer-display paused';
+                statusEl.textContent = 'PAUSED';
+            }
+        }
+
+        function sendCommand(command, value = null) {
+            if (channel) {
+                channel.postMessage({ command, value });
+            }
+        }
+
+        function adjustTime(seconds) {
+            sendCommand('adjustTime', seconds);
+        }
+
+        function setDuration(seconds) {
+            sendCommand('setDuration', seconds);
+        }
+
+        function flashTimer() {
+            sendCommand('flashTimer');
+        }
+
+        function setCustomDuration() {
+            const input = document.getElementById('customDuration');
+            const seconds = parseTime(input.value);
+            if (seconds > 0) {
+                setDuration(seconds);
+            } else {
+                alert('Please enter a valid duration (e.g., "10:00" or "600")');
+            }
+        }
+
+        function setCustomMessage() {
+            const input = document.getElementById('customMessage');
+            const message = input.value.trim();
+            sendCommand('setMessage', message);
+        }
+
+        function clearMessage() {
+            document.getElementById('customMessage').value = '';
+            sendCommand('setMessage', '');
+        }
+
+        // Allow Enter key to set custom duration
+        document.getElementById('customDuration').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                setCustomDuration();
+            }
+        });
+
+        // Allow Enter key to send message
+        document.getElementById('customMessage').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                setCustomMessage();
+            }
+        });
+    </script>
+</body>
+</html>
