@@ -191,7 +191,8 @@
             margin-top: 6px;
         }
 
-        input[type="text"] {
+        input[type="text"],
+        input[type="password"] {
             flex: 1;
             padding: 8px;
             border: 1px solid #444;
@@ -202,7 +203,8 @@
             font-family: 'Courier New', monospace;
         }
 
-        input[type="text"]:focus {
+        input[type="text"]:focus,
+        input[type="password"]:focus {
             outline: none;
             border-color: #4CAF50;
         }
@@ -273,7 +275,8 @@
                 gap: 4px;
             }
 
-            input[type="text"] {
+            input[type="text"],
+            input[type="password"] {
                 padding: 6px;
                 font-size: 11px;
             }
@@ -343,6 +346,35 @@
                     </div>
                     <div class="button-group" style="margin-top: 6px;">
                         <button class="stop" onclick="clearMessage()">Clear</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">OBS Settings</div>
+                    <div class="input-group">
+                        <input type="text" id="obsHost" placeholder="Host" value="localhost" style="flex: 0.8;">
+                        <input type="text" id="obsPort" placeholder="Port" value="4455" style="flex: 0.5;">
+                    </div>
+                    <div class="input-group" style="margin-top: 6px;">
+                        <input type="password" id="obsPassword" placeholder="Password (optional)">
+                        <button class="start" onclick="connectOBS()" id="obsConnectBtn">Connect</button>
+                    </div>
+                    <div id="obsStatus" style="font-size: 10px; color: #888; margin-top: 4px; text-align: center;"></div>
+                </div>
+
+                <div class="section" id="obsSourcesSection" style="display: none;">
+                    <div class="section-title">
+                        OBS Source Control
+                        <button onclick="refreshSources()" style="float: right; padding: 2px 8px; font-size: 9px; background: #607D8B; color: white; border: none; border-radius: 3px; cursor: pointer;">⟳ Refresh</button>
+                    </div>
+                    <div style="margin-bottom: 6px;">
+                        <label style="font-size: 10px; color: #888;">Scene:</label>
+                        <select id="sceneSelect" onchange="changeScene()" style="width: 100%; padding: 4px; background: #1e1e1e; color: white; border: 1px solid #444; border-radius: 4px; font-size: 11px; margin-top: 2px;">
+                            <option>Loading scenes...</option>
+                        </select>
+                    </div>
+                    <div id="obsSources" style="font-size: 11px; color: #888;">
+                        Connect to OBS to see sources
                     </div>
                 </div>
             </div>
@@ -497,6 +529,307 @@
                 setCustomMessage();
             }
         });
+
+        // OBS WebSocket Integration
+        let obsWs = null;
+        let obsRequestId = 1;
+        let obsRequests = {};
+        let currentSceneName = null;
+        let sceneItems = [];
+
+        // Load saved OBS settings
+        const savedObsHost = localStorage.getItem('obsHost') || 'localhost';
+        const savedObsPort = localStorage.getItem('obsPort') || '4455';
+        document.getElementById('obsHost').value = savedObsHost;
+        document.getElementById('obsPort').value = savedObsPort;
+
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return btoa(String.fromCharCode.apply(null, hashArray));
+        }
+
+        function connectOBS() {
+            const host = document.getElementById('obsHost').value;
+            const port = document.getElementById('obsPort').value;
+            const password = document.getElementById('obsPassword').value;
+
+            // Save settings
+            localStorage.setItem('obsHost', host);
+            localStorage.setItem('obsPort', port);
+
+            const wsUrl = `ws://${host}:${port}`;
+            updateObsStatus('Connecting...', '#ff9800');
+
+            obsWs = new WebSocket(wsUrl);
+
+            obsWs.onopen = () => {
+                console.log('OBS WebSocket connected');
+            };
+
+            obsWs.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+
+                // OpCode 0: Hello - Authentication required
+                if (data.op === 0) {
+                    if (data.d.authentication && password) {
+                        const secret = await sha256(password + data.d.authentication.salt);
+                        const auth = await sha256(secret + data.d.authentication.challenge);
+
+                        // OpCode 1: Identify with authentication
+                        obsWs.send(JSON.stringify({
+                            op: 1,
+                            d: {
+                                rpcVersion: 1,
+                                authentication: auth
+                            }
+                        }));
+                    } else {
+                        // OpCode 1: Identify without authentication
+                        obsWs.send(JSON.stringify({
+                            op: 1,
+                            d: {
+                                rpcVersion: 1
+                            }
+                        }));
+                    }
+                }
+
+                // OpCode 2: Identified - Connection successful
+                if (data.op === 2) {
+                    updateObsStatus('Connected', '#4CAF50');
+                    document.getElementById('obsConnectBtn').textContent = 'Disconnect';
+                    document.getElementById('obsConnectBtn').onclick = disconnectOBS;
+
+                    // Get list of scenes
+                    sendObsRequest('GetSceneList', {});
+
+                    // Get current scene
+                    sendObsRequest('GetCurrentProgramScene', {});
+                }
+
+                // OpCode 7: RequestResponse
+                if (data.op === 7) {
+                    const request = obsRequests[data.d.requestId];
+                    if (request) {
+                        request.resolve(data.d);
+                        delete obsRequests[data.d.requestId];
+                    }
+
+                    // Handle specific responses
+                    if (data.d.requestType === 'GetSceneList') {
+                        const scenes = data.d.responseData.scenes;
+                        const sceneSelect = document.getElementById('sceneSelect');
+                        sceneSelect.innerHTML = '';
+
+                        scenes.forEach(scene => {
+                            const option = document.createElement('option');
+                            option.value = scene.sceneName;
+                            option.textContent = scene.sceneName;
+                            sceneSelect.appendChild(option);
+                        });
+
+                        console.log('Loaded scenes:', scenes.map(s => s.sceneName));
+                    }
+
+                    if (data.d.requestType === 'GetCurrentProgramScene') {
+                        currentSceneName = data.d.responseData.currentProgramSceneName;
+
+                        // Update dropdown to show current scene
+                        const sceneSelect = document.getElementById('sceneSelect');
+                        sceneSelect.value = currentSceneName;
+
+                        // Get scene items
+                        sendObsRequest('GetSceneItemList', { sceneName: currentSceneName });
+                    }
+
+                    if (data.d.requestType === 'GetSceneItemList') {
+                        const items = data.d.responseData.sceneItems;
+                        console.log('Received scene items:');
+                        console.log(JSON.stringify(items, null, 2));
+
+                        // Check for groups and fetch their items too
+                        processSceneItems(items);
+                    }
+                }
+            };
+
+            obsWs.onerror = (error) => {
+                console.error('OBS WebSocket error:', error);
+                updateObsStatus('Connection error', '#f44336');
+            };
+
+            obsWs.onclose = () => {
+                updateObsStatus('Disconnected', '#f44336');
+                document.getElementById('obsConnectBtn').textContent = 'Connect';
+                document.getElementById('obsConnectBtn').onclick = connectOBS;
+                document.getElementById('obsSourcesSection').style.display = 'none';
+                obsWs = null;
+            };
+        }
+
+        function disconnectOBS() {
+            if (obsWs) {
+                obsWs.close();
+            }
+        }
+
+        function sendObsRequest(requestType, requestData = {}) {
+            if (!obsWs || obsWs.readyState !== WebSocket.OPEN) {
+                return Promise.reject(new Error('OBS not connected'));
+            }
+
+            const requestId = String(obsRequestId++);
+
+            return new Promise((resolve, reject) => {
+                obsRequests[requestId] = { resolve, reject };
+
+                // OpCode 6: Request
+                obsWs.send(JSON.stringify({
+                    op: 6,
+                    d: {
+                        requestType: requestType,
+                        requestId: requestId,
+                        requestData: requestData
+                    }
+                }));
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (obsRequests[requestId]) {
+                        delete obsRequests[requestId];
+                        reject(new Error('Request timeout'));
+                    }
+                }, 5000);
+            });
+        }
+
+        function updateObsStatus(message, color) {
+            const statusEl = document.getElementById('obsStatus');
+            statusEl.textContent = message;
+            statusEl.style.color = color;
+        }
+
+        async function processSceneItems(items, parentGroup = null) {
+            const allItems = [];
+
+            for (const item of items) {
+                // Add parent group info if this is a nested item
+                const itemWithParent = {
+                    ...item,
+                    parentGroup: parentGroup,
+                    displayName: parentGroup ? `  └ ${item.sourceName}` : item.sourceName
+                };
+                allItems.push(itemWithParent);
+
+                // Check if this item is a group (groups have sourceType "OBS_SOURCE_TYPE_SCENE")
+                if (item.sourceType === 'OBS_SOURCE_TYPE_SCENE' || item.isGroup === true) {
+                    console.log('Found group:', item.sourceName);
+                    try {
+                        // Fetch items from the group
+                        const groupData = await sendObsRequest('GetSceneItemList', {
+                            sceneName: item.sourceName
+                        });
+
+                        if (groupData.responseData && groupData.responseData.sceneItems) {
+                            console.log(`Group "${item.sourceName}" contains ${groupData.responseData.sceneItems.length} items`);
+                            // Recursively process group items
+                            const nestedItems = await processSceneItems(
+                                groupData.responseData.sceneItems,
+                                item.sourceName
+                            );
+                            allItems.push(...nestedItems);
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch group items:', error);
+                    }
+                }
+            }
+
+            // Update the main list only at the top level
+            if (!parentGroup) {
+                sceneItems = allItems;
+                updateSourcesList();
+            }
+
+            return allItems;
+        }
+
+        function updateSourcesList() {
+            const sourcesEl = document.getElementById('obsSources');
+            const sourcesSection = document.getElementById('obsSourcesSection');
+
+            if (sceneItems.length === 0) {
+                sourcesEl.innerHTML = '<div style="color: #888;">No sources in current scene</div>';
+                sourcesSection.style.display = 'block';
+                return;
+            }
+
+            sourcesEl.innerHTML = '';
+
+            // Display items in order (preserving hierarchy)
+            sceneItems.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+
+                const button = document.createElement('button');
+                button.textContent = item.sceneItemEnabled ? 'Hide' : 'Show';
+                button.className = item.sceneItemEnabled ? 'stop' : 'start';
+                button.style.cssText = 'padding: 4px 8px; font-size: 10px; flex: 0 0 50px;';
+
+                // Pass the correct scene name (parent group if nested, current scene otherwise)
+                const sceneName = item.parentGroup || currentSceneName;
+                button.onclick = () => toggleSourceVisibility(item.sceneItemId, !item.sceneItemEnabled, sceneName);
+
+                const label = document.createElement('span');
+                label.textContent = item.displayName || item.sourceName;
+                label.style.cssText = `color: ${item.sceneItemEnabled ? '#fff' : '#666'}; font-size: 11px;`;
+
+                itemDiv.appendChild(button);
+                itemDiv.appendChild(label);
+                sourcesEl.appendChild(itemDiv);
+            });
+
+            sourcesSection.style.display = 'block';
+        }
+
+        async function toggleSourceVisibility(sceneItemId, enabled, sceneName) {
+            try {
+                await sendObsRequest('SetSceneItemEnabled', {
+                    sceneName: sceneName,
+                    sceneItemId: sceneItemId,
+                    sceneItemEnabled: enabled
+                });
+
+                // Update local state
+                const item = sceneItems.find(i => i.sceneItemId === sceneItemId);
+                if (item) {
+                    item.sceneItemEnabled = enabled;
+                    updateSourcesList();
+                }
+            } catch (error) {
+                console.error('Failed to toggle source:', error);
+                updateObsStatus('Failed to toggle source', '#f44336');
+            }
+        }
+
+        // Change scene selection
+        function changeScene() {
+            const sceneSelect = document.getElementById('sceneSelect');
+            currentSceneName = sceneSelect.value;
+            console.log('Switching to scene:', currentSceneName);
+
+            // Fetch sources for the new scene
+            sendObsRequest('GetSceneItemList', { sceneName: currentSceneName });
+        }
+
+        // Refresh sources button
+        function refreshSources() {
+            if (currentSceneName) {
+                sendObsRequest('GetSceneItemList', { sceneName: currentSceneName });
+            }
+        }
     </script>
 </body>
 </html>
