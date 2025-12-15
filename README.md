@@ -1,6 +1,9 @@
-# Stream Timer
+# Conference Timer
 
-A browser-based countdown timer for live streams and conferences with OBS integration.
+A browser-based countdown timer for conferences / events with OBS integration.
+
+<img width="1038" height="1484" alt="control panel" src="https://github.com/user-attachments/assets/4570037f-d598-4906-87cf-e4857ca5b3fc" />
+
 
 ## Features
 
