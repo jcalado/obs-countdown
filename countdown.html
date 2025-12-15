@@ -169,6 +169,15 @@
         .controls button.reset:hover {
             background: #0b7dda;
         }
+
+        .blink-colon {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -279,9 +288,9 @@
 
             let timeString;
             if (hrs > 0) {
-                timeString = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                timeString = `${hrs.toString().padStart(2, '0')}<span class="blink-colon">:</span>${mins.toString().padStart(2, '0')}<span class="blink-colon">:</span>${secs.toString().padStart(2, '0')}`;
             } else {
-                timeString = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                timeString = `${mins.toString().padStart(2, '0')}<span class="blink-colon">:</span>${secs.toString().padStart(2, '0')}`;
             }
 
             return isNegative ? `-${timeString}` : timeString;
@@ -291,8 +300,7 @@
             const now = new Date();
             const hrs = now.getHours().toString().padStart(2, '0');
             const mins = now.getMinutes().toString().padStart(2, '0');
-            const secs = now.getSeconds().toString().padStart(2, '0');
-            return `${hrs}:${mins}:${secs}`;
+            return `${hrs}<span class="blink-colon">:</span>${mins}`;
         }
 
         function getEffectiveMode() {
@@ -333,17 +341,17 @@
             const mode = getEffectiveMode();
 
             if (mode === 'clock') {
-                timerElement.textContent = formatClock();
+                timerElement.innerHTML = formatClock();
                 timerElement.style.color = config.color;
                 timerElement.classList.remove('warning');
             } else if (isCountUpMode()) {
                 const elapsed = typeof latestState.timeElapsed === 'number' ? latestState.timeElapsed : 0;
-                timerElement.textContent = formatTime(elapsed);
+                timerElement.innerHTML = formatTime(elapsed);
                 timerElement.style.color = config.color;
                 timerElement.classList.remove('warning');
             } else {
                 const remaining = typeof latestState.timeRemaining === 'number' ? latestState.timeRemaining : config.duration;
-                timerElement.textContent = formatTime(remaining);
+                timerElement.innerHTML = formatTime(remaining);
 
                 if (remaining <= 0) {
                     timerElement.style.color = config.dangerColor;
