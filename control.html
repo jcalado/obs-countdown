@@ -386,6 +386,9 @@
                         <button class="preset" onclick="flashTimer()">Flash Timer</button>
                     </div>
                     <div class="button-group full" style="margin-top: 6px;">
+                        <button class="preset" id="modeToggleBtn" onclick="toggleMode()">CLOCK MODE</button>
+                    </div>
+                    <div class="button-group full" style="margin-top: 6px;">
                         <button class="gameover" id="gameOverBtn" onclick="toggleGameOver()">GAME OVER (OFF)</button>
                     </div>
                 </div>
@@ -775,6 +778,32 @@
             syncState();
         }
 
+        function updateModeToggleButton() {
+            const btn = document.getElementById('modeToggleBtn');
+            if (!btn) return;
+
+            if (timerState.mode === 'clock') {
+                btn.textContent = 'COUNTDOWN MODE';
+                btn.classList.remove('preset');
+                btn.classList.add('adjust');
+            } else {
+                btn.textContent = 'CLOCK MODE';
+                btn.classList.remove('adjust');
+                btn.classList.add('preset');
+            }
+        }
+
+        function toggleMode() {
+            if (timerState.mode === 'clock') {
+                timerState.mode = 'countdown';
+            } else {
+                timerState.mode = 'clock';
+            }
+
+            updateModeToggleButton();
+            syncState();
+        }
+
         function handleExternalCommand(command, value = null) {
             switch (command) {
                 case 'start':
@@ -804,6 +833,9 @@
                 case 'gameOver':
                     toggleGameOver(Boolean(value));
                     break;
+                case 'toggleMode':
+                    toggleMode();
+                    break;
             }
         }
 
@@ -821,6 +853,7 @@
 
         updateDisplay();
         updateGameOverButton();
+        updateModeToggleButton();
 
         try {
             channel = new BroadcastChannel('timer-control');
